@@ -9,14 +9,15 @@ import numpy as np
 from datetime import datetime
 import os
 
-# Try to load secrets from secrets.toml file
+# API Key loading from secrets.toml 
 try:
     import toml
     secrets = toml.load('secrets.toml')
     API_KEY = secrets['huggingface']['api_key']
-except (ImportError, FileNotFoundError, KeyError):
-    # Fallback to environment variable or default
-    API_KEY = os.getenv('HUGGINGFACE_API_KEY', 'your_default_key_here')
+    print(f"✅ API Key loaded from secrets.toml: {API_KEY[:20]}...")
+except (ImportError, FileNotFoundError, KeyError) as e:
+    print(f"❌ Error loading secrets.toml: {e}")
+    API_KEY = None  
 
 st.set_page_config(
     page_title="🛡️ Fake News Detector",
@@ -93,24 +94,19 @@ def call_fake_news_api(text, api_key=API_KEY):
         response.raise_for_status()
         result = response.json()
         
-        # Debug output to console
         print(f"DEBUG: Raw API Response: {result}")
         print(f"DEBUG: Response type: {type(result)}")
         
-        # Handle different response formats
         if result and isinstance(result, list) and len(result) > 0:
             predictions = result[0]
             
-            # Handle list format (newer Hugging Face API)
             if isinstance(predictions, list):
                 fake_score = next((p['score'] for p in predictions if p.get('label') == 'LABEL_0'), 0)
                 real_score = next((p['score'] for p in predictions if p.get('label') == 'LABEL_1'), 1)
-            # Handle dict format (older Hugging Face API)
             elif isinstance(predictions, dict):
                 fake_score = predictions.get('LABEL_0', 0)
                 real_score = predictions.get('LABEL_1', 1)
             else:
-                # Fallback: assume direct scores
                 fake_score = 0.5
                 real_score = 0.5
             
@@ -123,13 +119,13 @@ def call_fake_news_api(text, api_key=API_KEY):
             
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 429:
-            st.error("❌ API Rate limit exceeded. Please try again later.")
+            st.error("API Rate limit exceeded. Please try again later.")
         elif e.response.status_code == 403:
-            st.error("❌ Invalid API token. Please check your Hugging Face token.")
+            st.error("Invalid API token. Please check your Hugging Face token.")
         else:
-            st.error(f"❌ API Error {e.response.status_code}: {e.response.text}")
+            st.error(f"API Error {e.response.status_code}: {e.response.text}")
     except Exception as e:
-        st.error(f"❌ API Connection Error: {str(e)}")
+        st.error(f"API Connection Error: {str(e)}")
     
     return None
 
@@ -147,11 +143,10 @@ def analyze_text_features(text):
     """
     Enhanced fake news pattern analysis with stronger fake news detection
     """
-    score = 50  # Start neutral, lean towards skepticism
+    score = 50  
     flags = []
     fake_indicators = []
 
-    # Enhanced sensational and fake news words (20+ words)
     sensational_words = [
         'shocking', 'unbelievable', 'miracle', 'secret', 'exposed', 'breaking',
         'you won\'t believe', 'doctors hate', 'scientists stunned', 'amazing',
@@ -162,7 +157,7 @@ def analyze_text_features(text):
     
     sensational_count = sum(1 for word in sensational_words if word in text.lower())
     if sensational_count > 4:
-        score -= 30  # Much stronger penalty
+        score -= 30  
         fake_indicators.append("Heavy sensationalism")
         flags.append("Contains excessive sensational language")
     elif sensational_count > 2:
@@ -174,7 +169,6 @@ def analyze_text_features(text):
         fake_indicators.append("Mild sensationalism")
         flags.append("Contains some sensational language")
 
-    # FAKE NEWS SPECIFIC PHRASES (NEW!)
     fake_news_phrases = [
         'this will change everything', 'you won\'t believe', 'experts are baffled',
         'they don\'t want you to know', 'hidden truth', 'cover-up', 'conspiracy',
@@ -185,7 +179,7 @@ def analyze_text_features(text):
     
     fake_phrase_count = sum(1 for phrase in fake_news_phrases if phrase in text.lower())
     if fake_phrase_count > 2:
-        score -= 25  # Strong fake news penalty
+        score -= 25 
         fake_indicators.append("Multiple fake news phrases")
         flags.append("Contains fake news buzzwords")
     elif fake_phrase_count > 0:
@@ -193,7 +187,6 @@ def analyze_text_features(text):
         fake_indicators.append("Fake news phrases detected")
         flags.append("Contains fake news language patterns")
 
-    # Enhanced credible indicators
     credible_indicators = [
         'study', 'research', 'university', 'journal', 'peer-reviewed',
         'according to', 'experts say', 'data shows', 'evidence suggests',
@@ -211,13 +204,11 @@ def analyze_text_features(text):
         score = min(100, score + 10)
         flags.append("Some credible source indicators")
 
-    # Lack of credible attribution (negative indicator)
     if credible_count == 0 and len(text.split()) > 100:
         score -= 15
         fake_indicators.append("No credible sources mentioned")
         flags.append("Lacks credible source attribution")
 
-    # Excessive punctuation analysis (fake news often uses !!!)
     exclamation_count = text.count('!')
     if exclamation_count > 8:
         score -= 20
@@ -232,14 +223,12 @@ def analyze_text_features(text):
         fake_indicators.append("Some exclamation marks")
         flags.append("Multiple exclamation marks")
 
-    # Question mark analysis (fake news often asks leading questions)
     question_count = text.count('?')
     if question_count > 5:
         score -= 15
         fake_indicators.append("Excessive questions")
         flags.append("Excessive question marks")
 
-    # All caps analysis (fake news often uses ALL CAPS for emphasis)
     words = text.split()
     caps_ratio = sum(1 for word in words if len(word) > 3 and word.isupper()) / len(words) if words else 0
     if caps_ratio > 0.4:
@@ -251,7 +240,6 @@ def analyze_text_features(text):
         fake_indicators.append("Moderate ALL CAPS usage")
         flags.append("Excessive use of ALL CAPS")
 
-    # Emotional manipulation words
     emotional_words = [
         'hate', 'love', 'fear', 'anger', 'rage', 'panic', 'terror',
         'disgust', 'shock', 'horror', 'outrage', 'betrayal', 'scandal'
@@ -266,7 +254,6 @@ def analyze_text_features(text):
         fake_indicators.append("Emotional manipulation")
         flags.append("Uses emotional language")
 
-    # Conspiracy indicators
     conspiracy_words = [
         'conspiracy', 'cover-up', 'deep state', 'illuminati', 'new world order',
         'they don\'t want you to know', 'hidden agenda', 'global elite',
@@ -282,7 +269,6 @@ def analyze_text_features(text):
         fake_indicators.append("Conspiracy indicators")
         flags.append("Contains conspiracy theory elements")
 
-    # Fake news urgency indicators
     urgency_words = [
         'urgent', 'warning', 'alert', 'breaking news', 'developing story',
         'emergency', 'crisis', 'critical', 'immediate action required'
@@ -297,7 +283,6 @@ def analyze_text_features(text):
         fake_indicators.append("Urgency manipulation")
         flags.append("Creates urgency")
 
-    # Scientific/technical jargon without context (fake science news)
     science_words = [
         'quantum', 'nanotechnology', 'revolutionary technology', 'breakthrough treatment',
         'miracle cure', 'scientific breakthrough', 'medical breakthrough'
@@ -308,10 +293,8 @@ def analyze_text_features(text):
         fake_indicators.append("Fake science claims")
         flags.append("Makes unsubstantiated scientific claims")
 
-    # Return results
     final_score = max(0, min(100, score))
     
-    # Add fake indicators to flags for display
     if fake_indicators:
         flags.extend([f"🚨 Fake news indicator: {indicator}" for indicator in fake_indicators])
 
@@ -328,11 +311,9 @@ def extract_article_from_url(url):
 
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # Remove unwanted elements
         for script in soup(["script", "style", "nav", "footer", "header", "aside", "advertisement"]):
             script.decompose()
 
-        # Try to find article content
         article = (soup.find('article') or
                   soup.find('div', class_=re.compile('article|content|post|entry|story')) or
                   soup.find('main') or
@@ -341,14 +322,12 @@ def extract_article_from_url(url):
         if article:
             text = article.get_text()
         else:
-            # Fallback to body text
             body = soup.find('body')
             if body:
                 text = body.get_text()
             else:
                 text = soup.get_text()
 
-        # Clean up the text
         lines = (line.strip() for line in text.splitlines())
         chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
         text = ' '.join(chunk for chunk in chunks if chunk and len(chunk) > 10)
@@ -358,7 +337,7 @@ def extract_article_from_url(url):
 
         return {
             'title': title_text,
-            'text': text[:5000],  # Limit to prevent API issues
+            'text': text[:5000],   
             'domain': urlparse(url).netloc
         }
     except Exception as e:
@@ -375,13 +354,12 @@ def generate_summary(text, max_sentences=3):
     if len(sentences) <= max_sentences:
         return ' '.join(sentences)
 
-    # Score sentences by importance
     scored_sentences = []
-    for i, sentence in enumerate(sentences[:15]):  # Limit to first 15 sentences
-        score = len(sentence.split())  # Base score on length
-        if i < 3:  # Boost early sentences
+    for i, sentence in enumerate(sentences[:15]): 
+        score = len(sentence.split()) 
+        if i < 3: 
             score *= 1.5
-        if '?' in sentence:  # Boost questions
+        if '?' in sentence:
             score *= 1.2
 
         scored_sentences.append((score, sentence))
@@ -389,7 +367,6 @@ def generate_summary(text, max_sentences=3):
     scored_sentences.sort(reverse=True)
     top_sentences = [s[1] for s in scored_sentences[:max_sentences]]
 
-    # Get sentences in original order
     summary_sentences = []
     for sentence in sentences:
         if sentence in top_sentences:
@@ -453,18 +430,17 @@ def main():
                     else:
                         st.error("❌ Could not extract article from URL")
 
-    # API Key input (with default for testing)
+    default_api_key = API_KEY if API_KEY else ""
     api_key = st.sidebar.text_input("🔑 API Key", 
                                    type="password",
-                                   value=[secrets['huggingface']['api_key']],
-                                   help="Get from https://huggingface.co/settings/tokens")
+                                   value=default_api_key,
+                                   help="Leave empty to use secrets.toml, or enter to override")
 
     if st.button("🔬 Analyze Content", type="primary", use_container_width=True):
         if not input_text.strip() and not input_url:
             st.error("❌ Please provide text or URL to analyze")
             return
 
-        # Handle URL-only input
         if input_url and not input_text.strip():
             article_data = extract_article_from_url(input_url)
             if article_data:
@@ -477,9 +453,12 @@ def main():
             st.error("❌ Text is too short for analysis (min 50 characters)")
             return
 
-        with st.spinner("🤖 Analyzing with AI..."):
+        # Use the input API key, or fall back to loaded API key
+        effective_api_key = api_key if api_key.strip() else API_KEY
+        
+        with st.spinner("🤖 Analyzing with AI API..."):
             processed_text = preprocess_text(input_text)
-            api_result = call_fake_news_api(processed_text, api_key)
+            api_result = call_fake_news_api(processed_text, effective_api_key)
             
             if api_result:
                 api_credibility = api_result['real_confidence']
@@ -487,26 +466,19 @@ def main():
                 st.success("✅ AI Analysis Complete")
             else:
                 st.error("❌ API unavailable. Using pattern analysis only.")
-                # Fallback to pattern-only analysis
                 api_credibility = 50.0
                 fake_news_score = 50.0
 
             feature_score, flags = analyze_text_features(input_text)
-            
-            # Improved scoring: 60% API + 40% pattern analysis (more weight to fake news detection)
             combined_credibility = (api_credibility * 0.6 + feature_score * 0.4)
-
             summary = generate_summary(input_text)
 
-        # Display results
         st.markdown("---")
         st.subheader("📊 Analysis Results")
         
-        # Create two main columns for results
         main_col1, main_col2 = st.columns([2, 1])
         
         with main_col1:
-            # Main score display
             col1, col2, col3 = st.columns([1, 2, 1])
 
             with col2:
@@ -546,7 +518,6 @@ def main():
                 st.metric("📊 Word Count", len(input_text.split()))
                 st.metric("📏 Character Count", len(input_text))
 
-            # Risk assessment
             if fake_news_score > 60:
                 st.error("🚨 **High Fake News Risk**")
             elif fake_news_score > 40:
