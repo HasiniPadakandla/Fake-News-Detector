@@ -7,17 +7,23 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import numpy as np
 from datetime import datetime
-import os
 
-# API Key loading from secrets.toml 
+# Try to load API key from Streamlit Cloud secrets (for deployed app)
+# or from secrets.toml (for local development)
 try:
-    import toml
-    secrets = toml.load('secrets.toml')
-    API_KEY = secrets['huggingface']['api_key']
-    print(f"✅ API Key loaded from secrets.toml: {API_KEY[:20]}...")
-except (ImportError, FileNotFoundError, KeyError) as e:
-    print(f"❌ Error loading secrets.toml: {e}")
-    API_KEY = None  
+    # Check if running on Streamlit Cloud
+    API_KEY = st.secrets["huggingface"]["api_key"]
+    print(f"✅ API Key loaded from Streamlit Cloud secrets: {API_KEY[:20]}...")
+except (FileNotFoundError, KeyError):
+    # Fallback to local secrets.toml for development
+    try:
+        import toml
+        secrets = toml.load('secrets.toml')
+        API_KEY = secrets['huggingface']['api_key']
+        print(f"✅ API Key loaded from secrets.toml: {API_KEY[:20]}...")
+    except (ImportError, FileNotFoundError, KeyError):
+        print("❌ No API key found in secrets.toml or Streamlit Cloud secrets")
+        API_KEY = None
 
 st.set_page_config(
     page_title="🛡️ Fake News Detector",
@@ -143,10 +149,11 @@ def analyze_text_features(text):
     """
     Enhanced fake news pattern analysis with stronger fake news detection
     """
-    score = 50  
+    score = 50  # Start neutral, lean towards skepticism
     flags = []
     fake_indicators = []
 
+    # Enhanced sensational and fake news words (20+ words)
     sensational_words = [
         'shocking', 'unbelievable', 'miracle', 'secret', 'exposed', 'breaking',
         'you won\'t believe', 'doctors hate', 'scientists stunned', 'amazing',
@@ -157,7 +164,7 @@ def analyze_text_features(text):
     
     sensational_count = sum(1 for word in sensational_words if word in text.lower())
     if sensational_count > 4:
-        score -= 30  
+        score -= 30  # Much stronger penalty
         fake_indicators.append("Heavy sensationalism")
         flags.append("Contains excessive sensational language")
     elif sensational_count > 2:
@@ -169,6 +176,7 @@ def analyze_text_features(text):
         fake_indicators.append("Mild sensationalism")
         flags.append("Contains some sensational language")
 
+    # FAKE NEWS SPECIFIC PHRASES (NEW!)
     fake_news_phrases = [
         'this will change everything', 'you won\'t believe', 'experts are baffled',
         'they don\'t want you to know', 'hidden truth', 'cover-up', 'conspiracy',
@@ -179,7 +187,7 @@ def analyze_text_features(text):
     
     fake_phrase_count = sum(1 for phrase in fake_news_phrases if phrase in text.lower())
     if fake_phrase_count > 2:
-        score -= 25 
+        score -= 25  # Strong fake news penalty
         fake_indicators.append("Multiple fake news phrases")
         flags.append("Contains fake news buzzwords")
     elif fake_phrase_count > 0:
@@ -187,6 +195,7 @@ def analyze_text_features(text):
         fake_indicators.append("Fake news phrases detected")
         flags.append("Contains fake news language patterns")
 
+    # Enhanced credible indicators
     credible_indicators = [
         'study', 'research', 'university', 'journal', 'peer-reviewed',
         'according to', 'experts say', 'data shows', 'evidence suggests',
@@ -204,11 +213,13 @@ def analyze_text_features(text):
         score = min(100, score + 10)
         flags.append("Some credible source indicators")
 
+    # Lack of credible attribution (negative indicator)
     if credible_count == 0 and len(text.split()) > 100:
         score -= 15
         fake_indicators.append("No credible sources mentioned")
         flags.append("Lacks credible source attribution")
 
+    # Excessive punctuation analysis (fake news often uses !!!)
     exclamation_count = text.count('!')
     if exclamation_count > 8:
         score -= 20
@@ -223,12 +234,14 @@ def analyze_text_features(text):
         fake_indicators.append("Some exclamation marks")
         flags.append("Multiple exclamation marks")
 
+    # Question mark analysis (fake news often asks leading questions)
     question_count = text.count('?')
     if question_count > 5:
         score -= 15
         fake_indicators.append("Excessive questions")
         flags.append("Excessive question marks")
 
+    # All caps analysis (fake news often uses ALL CAPS for emphasis)
     words = text.split()
     caps_ratio = sum(1 for word in words if len(word) > 3 and word.isupper()) / len(words) if words else 0
     if caps_ratio > 0.4:
@@ -240,6 +253,7 @@ def analyze_text_features(text):
         fake_indicators.append("Moderate ALL CAPS usage")
         flags.append("Excessive use of ALL CAPS")
 
+    # Emotional manipulation words
     emotional_words = [
         'hate', 'love', 'fear', 'anger', 'rage', 'panic', 'terror',
         'disgust', 'shock', 'horror', 'outrage', 'betrayal', 'scandal'
@@ -254,6 +268,7 @@ def analyze_text_features(text):
         fake_indicators.append("Emotional manipulation")
         flags.append("Uses emotional language")
 
+    # Conspiracy indicators
     conspiracy_words = [
         'conspiracy', 'cover-up', 'deep state', 'illuminati', 'new world order',
         'they don\'t want you to know', 'hidden agenda', 'global elite',
@@ -269,6 +284,7 @@ def analyze_text_features(text):
         fake_indicators.append("Conspiracy indicators")
         flags.append("Contains conspiracy theory elements")
 
+    # Fake news urgency indicators
     urgency_words = [
         'urgent', 'warning', 'alert', 'breaking news', 'developing story',
         'emergency', 'crisis', 'critical', 'immediate action required'
@@ -283,6 +299,7 @@ def analyze_text_features(text):
         fake_indicators.append("Urgency manipulation")
         flags.append("Creates urgency")
 
+    # Scientific/technical jargon without context (fake science news)
     science_words = [
         'quantum', 'nanotechnology', 'revolutionary technology', 'breakthrough treatment',
         'miracle cure', 'scientific breakthrough', 'medical breakthrough'
@@ -293,6 +310,7 @@ def analyze_text_features(text):
         fake_indicators.append("Fake science claims")
         flags.append("Makes unsubstantiated scientific claims")
 
+    # Return results
     final_score = max(0, min(100, score))
     
     if fake_indicators:
