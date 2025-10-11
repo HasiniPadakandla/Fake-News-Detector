@@ -1,8 +1,14 @@
+# Core Streamlit
 streamlit==1.28.1
-nltk==3.8.1
-scikit-learn==1.3.2
-numpy==1.26.2
+
+# API and Web scraping
 requests==2.31.0
 beautifulsoup4==4.12.2
-transformers==4.35.2
-torch==2.1.0
+lxml==4.9.3
+
+# Text processing
+nltk==3.8.1
+numpy==1.26.2
+
+# Configuration
+toml==0.10.2
