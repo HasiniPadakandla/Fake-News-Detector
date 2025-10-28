@@ -2,6 +2,8 @@
 
 A **professional-grade fake news detection system** built with Streamlit and powered by Hugging Face's AI model. This application helps students, researchers, and the general public verify the credibility of news articles and online content using advanced AI analysis combined with pattern recognition.
 
+URL - https://fake-news-detector-ai.streamlit.app/
+
 ## ✨ Key Features
 
 - 🤖 **AI-Powered Analysis** - Uses Hugging Face's pre-trained BERT model for fake news detection
@@ -41,3 +43,4 @@ pip install -r streamlit_requirements.txt
 streamlit run main_app.py
 
 ```
+
